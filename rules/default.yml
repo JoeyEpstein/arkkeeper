@@ -1,0 +1,53 @@
+version: 1
+rules:
+  ssh_no_passphrase:
+    category: ssh
+    severity: high
+    weight: 30
+    description: "SSH key without passphrase protection"
+    condition: "not passphrase_protected"
+    remediation: |
+      Add passphrase to existing key:
+        ssh-keygen -p -f {path}
+      Or create new key with passphrase:
+        ssh-keygen -t ed25519 -a 256 -f {new_path}
+
+  ssh_weak_algorithm:
+    category: ssh
+    severity: high
+    weight: 25
+    description: "Weak SSH key algorithm"
+    condition: "algorithm == 'rsa' and key_size < 3072"
+    remediation: "Generate Ed25519 or RSA-4096 key"
+
+  ssh_excessive_permissions:
+    category: ssh
+    severity: critical
+    weight: 40
+    description: "SSH private key with excessive permissions"
+    condition: "permissions != '600'"
+    remediation: "chmod 600 {path}"
+
+  aws_key_age:
+    category: aws
+    severity: high
+    weight: 30
+    description: "AWS access key older than 90 days"
+    condition: "age_days > 90"
+    remediation: "Rotate using AWS IAM console or CLI"
+
+  aws_root_credentials:
+    category: aws
+    severity: critical
+    weight: 50
+    description: "AWS root account credentials detected"
+    condition: "profile == 'root' or user_id == 'root'"
+    remediation: "Never use root credentials; create IAM users"
+
+  git_credential_in_url:
+    category: git
+    severity: critical
+    weight: 45
+    description: "Credentials embedded in Git remote URL"
+    condition: "remote_url contains '@' and 'https://'"
+    remediation: "Use SSH URLs or credential helpers"
