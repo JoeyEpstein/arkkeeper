@@ -1,0 +1,1 @@
+chmod +x setup_arkkeeper.sh && ./setup_arkkeeper.sh && rm setup_arkkeeper.sh

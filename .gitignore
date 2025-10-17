@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+dist/
+*.egg-info/
+arkkeeper_outputs/
+*.backup.*
+venv/
+.DS_Store
+*.pem
+*.key
+*_rsa*
+*_ed25519*
