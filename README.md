@@ -1,5 +1,11 @@
-# 🔐 Arkkeeper
-
+```     _         _    _                           
+    / \   _ __| | _| | _____  ___ _ __   ___ _ __ 
+   / _ \ | '__| |/ / |/ / _ \/ _ \ '_ \ / _ \ '__|
+  / ___ \| |  |   <|   <  __/  __/ |_) |  __/ |   
+ /_/   \_\_|  |_|\_\_|\_\___|\___| .__/ \___|_|   
+                                  |_|              
+         Your secrets. Your control. Your peace of mind.
+```
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/downloads/)
 [![Security](https://img.shields.io/badge/security-first-green)](SECURITY.md)
 [![Privacy](https://img.shields.io/badge/privacy-local--first-purple)](PRIVACY.md)
