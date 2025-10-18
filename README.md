@@ -13,41 +13,47 @@
 [![Privacy](https://img.shields.io/badge/privacy-local--first-purple)](PRIVACY.md)
 [![License](https://img.shields.io/badge/license-MIT-orange)](LICENSE)
 
-> **Your local secrets hygiene guardian** — Find, score, and rotate credentials on your dev machine without ever exfiltrating secret material.
+> **Your local secrets hygiene guardian** — Find risky credentials on your dev machine, triage them with declarative rules, and generate local-only rotation playbooks.
 
-Arkkeeper inventories credentials on your local machine, calculates risk scores based on configurable rules, and generates safe rotation playbooks with optional calendar reminders. Everything stays local by default — no telemetry, no cloud dependencies, no secret values ever logged or transmitted.
+Arkkeeper inventories credentials on your local machine, assigns severity levels based on YAML rules, and generates safe rotation playbooks with optional calendar reminders. Everything stays local by default — no telemetry, no cloud dependencies, no secret values ever logged or transmitted.
 
 ## 🎯 Why Arkkeeper?
 
 Every developer's machine becomes an "Ark" over time — SSH keys from 2019, AWS credentials that "just work," npm tokens with no expiration, and that one Docker config with base64 auth you meant to fix. Arkkeeper helps you:
 
-- **Inventory** all credentials and secrets on your machine
-- **Score** risk based on age, encryption, permissions, and best practices
-- **Generate** safe, tested rotation scripts with rollback procedures
+- **Inventory** common developer credential stores on your machine
+- **Prioritize** remediation using YAML-based severity rules
+- **Generate** rotation scripts with built-in dry-run and rollback guidance
 - **Schedule** rotation reminders that integrate with your calendar
-- **Learn** security best practices through detailed remediation guides
+- **Learn** security best practices through actionable remediation text
 
 ## 🚀 Quick Start
 
 ```bash
-# Install via pip
-pip install arkkeeper
+# Clone the repository and enter it
+git clone https://github.com/yourusername/arkkeeper.git
+cd arkkeeper
 
-# Or use pipx for isolated environment (recommended)
-pipx install arkkeeper
+# Create and activate a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
 
-# Initialize configuration
-ark init
+# Install the project dependencies
+pip install -r requirements.txt
 
-# Run your first scan
-ark scan
+# Make sure the src/ layout is importable
+export PYTHONPATH="$(pwd)/src"
 
-# View the HTML report
-ark report --open
-
-# Generate rotation scripts for high-risk findings
-ark rotate --severity high --dry-run
+# Run the CLI end-to-end
+python -m ark.cli selftest
+python -m ark.cli init
+python -m ark.cli scan --out arkkeeper_outputs
+python -m ark.cli report --format terminal --input arkkeeper_outputs/findings.json
+python -m ark.cli rotate --id ssh_example --dry-run
+python -m ark.cli remind --calendar ics --days 90
 ```
+
+> **Tip:** The repository bundles `scripts/run_arkkeeper_demo.sh` if you prefer a single command to drive the workflow locally.
 
 ## 📊 What Gets Scanned
 
@@ -55,15 +61,16 @@ Arkkeeper inspects common credential locations with zero network calls by defaul
 
 | Category | Locations | Risk Signals |
 |----------|-----------|--------------|
-| **SSH** | `~/.ssh/*` | Unencrypted keys, weak algorithms (RSA <3072), excessive permissions, age >365d |
-| **AWS** | `~/.aws/credentials`<br>`~/.aws/config` | Key age >90d, missing MFA, wildcard regions, plaintext storage |
-| **Git** | `.git/config`<br>`~/.gitconfig` | Embedded credentials in URLs, plaintext credential helpers |
-| **GitHub/GitLab** | `~/.config/gh/`<br>`~/.git-credentials` | PAT presence, token age, missing expiration |
-| **Azure** | `~/.azure/` | Cached tokens, service principal secrets, missing federated auth |
-| **GCP** | `~/.config/gcloud/` | Service account JSON keys, missing ADC configuration |
-| **npm/PyPI** | `~/.npmrc`<br>`~/.pypirc` | Plaintext tokens, missing scopes, no expiration |
-| **Docker** | `~/.docker/config.json` | Base64 inline auth, missing credential store |
-| **Shell** | `.bashrc/.zshrc`<br>`.bash_history` | Exported secrets, command history patterns |
+| **SSH** | `~/.ssh/*` | Missing passphrases, legacy DSA keys, permissive file modes, age >365d |
+| **AWS** | `~/.aws/credentials`<br>`~/.aws/config` | Key file age >90d, missing MFA metadata, default profile usage |
+| **Git** | `.git/config`<br>`~/.gitconfig` | Credentials embedded in remotes, plaintext credential store |
+| **GitHub CLI** | `~/.config/gh/hosts.yml` | Stored personal access tokens |
+| **Azure CLI** | `~/.azure/accessTokens.json` | Cached access/refresh tokens |
+| **GCP** | `~/.config/gcloud/` | Application Default Credentials with private keys |
+| **npm** | `~/.npmrc` | Inline `_auth` or `_authToken` entries |
+| **PyPI** | `~/.pypirc` | Plaintext passwords |
+| **Docker** | `~/.docker/config.json` | Base64 inline auth entries, missing credential store |
+| **Shell History** | `.bash_history`<br>`.zsh_history` | Commands matching token/password patterns |
 
 ## 🛡️ Security Architecture
 
@@ -78,8 +85,8 @@ Arkkeeper inspects common credential locations with zero network calls by defaul
                                                  │
                                                  ▼
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│   Reports   │◀────│ Rule Engine  │◀────│    Score    │
-│ (HTML/JSON) │     │  (YAML rules)│     │  (0-100)    │
+│   Reports   │◀────│ Rule Engine  │◀────│  Severity   │
+│ (HTML/JSON) │     │  (YAML rules)│     │  labels     │
 └─────────────┘     └──────────────┘     └─────────────┘
                             │
                             ▼
@@ -93,12 +100,11 @@ Arkkeeper inspects common credential locations with zero network calls by defaul
 ### Core Security Principles
 
 1. **No Secret Values**: Only metadata (fingerprints, hashes, paths, ages) are processed
-2. **Local-Only Default**: No network calls without explicit `--online` flags
+2. **Local-Only Default**: No network calls or remote uploads
 3. **Dry-Run First**: All rotation scripts default to simulation mode
-4. **Backup Everything**: Automatic backups before any destructive operation
-5. **Explicit Consent**: Cloud operations require interactive confirmation
-6. **Memory Safety**: Secrets are never held in memory longer than necessary
-7. **Audit Trail**: All operations logged to `~/.config/arkkeeper/audit.log`
+4. **Backup Everything**: Generated playbooks back up files before changing them
+5. **Configurable Rules**: YAML files drive severity and remediation text
+6. **Local Outputs**: Reports, playbooks, and reminders stay on disk until you share them
 
 ## 📋 Rule Engine
 
@@ -111,33 +117,27 @@ rules:
     category: ssh
     severity: high
     weight: 30
-    condition: |
-      key_type in ['rsa', 'ecdsa', 'ed25519'] AND 
-      passphrase_protected == false
-    reason: "Unencrypted private keys can be stolen if machine is compromised"
-    fix: |
-      1. Create new key with passphrase:
-         ssh-keygen -p -f {path}
-      2. Add to ssh-agent for convenience:
-         ssh-add --apple-use-keychain {path}  # macOS
-      3. Update remote authorized_keys if needed
-    references:
-      - https://www.ssh.com/academy/ssh/passphrase
+    description: "SSH key without passphrase protection"
+    condition: "not passphrase_protected"
+    remediation: |
+      Add a passphrase to the key:
+        ssh-keygen -p -f {path}
 
-  aws_key_age:
+  aws_missing_mfa:
     category: aws
     severity: high
-    weight: 25
-    condition: "age_days > 90"
-    reason: "AWS recommends rotating access keys every 90 days"
-    fix: |
-      1. Create new access key:
-         aws iam create-access-key --user-name {user}
-      2. Update local credentials
-      3. Test new key
-      4. Deactivate old key:
-         aws iam update-access-key --access-key-id {old_key} --status Inactive
-      5. After validation, delete old key
+    weight: 20
+    description: "AWS profile missing MFA configuration"
+    condition: "not has_mfa"
+    remediation: "Configure mfa_serial in ~/.aws/config and require MFA for access"
+
+  git_plaintext_store:
+    category: git
+    severity: high
+    weight: 35
+    description: "Git credentials stored in plaintext"
+    condition: "contains_password"
+    remediation: "Switch to a credential helper instead of storing passwords"
 ```
 
 ## 🔄 Rotation Playbooks
@@ -145,99 +145,87 @@ rules:
 Arkkeeper generates safe, tested rotation scripts for each finding:
 
 ```bash
-# Example: playbooks/ssh-key-rotation-2024-01-15/rotate.sh
+# Example: playbooks/rotation_ssh_example_1700000000/rotate.sh
 #!/bin/bash
+# Arkkeeper Rotation Script
+# Finding ID: ssh_example
+# Generated: 2024-01-15T10:30:00
+# Mode: DRY RUN
+
 set -euo pipefail
 
-# Arkkeeper SSH Key Rotation Script
-# Generated: 2024-01-15 10:30:00
-# Finding ID: ssh_weak_key_001
-# Risk Score: 85/100
+echo "🔐 Arkkeeper Credential Rotation"
+echo "================================"
+echo "Finding: ssh_example"
+echo ""
 
-# Safety checks
-echo "🔍 Pre-rotation checks..."
-if [ ! -f ~/.ssh/id_rsa ]; then
-    echo "❌ Original key not found"
-    exit 1
-fi
-
-# Backup
-echo "💾 Creating backup..."
-cp -r ~/.ssh ~/.ssh.backup.$(date +%Y%m%d_%H%M%S)
-
-# Generate new key
-echo "🔑 Generating new Ed25519 key..."
-ssh-keygen -t ed25519 -a 256 -C "rotated_$(date +%Y%m%d)" \
-    -f ~/.ssh/id_ed25519_new
-
-# Test new key (dry-run by default)
 if [ "${DRY_RUN:-1}" = "1" ]; then
-    echo "✅ DRY RUN: Would update authorized_keys on:"
-    grep -h "^Host " ~/.ssh/config 2>/dev/null | awk '{print $2}'
-else
-    echo "🚀 Updating remote servers..."
-    # Actual rotation logic here
+    echo "⚠️  DRY RUN MODE - No changes will be made"
+    echo ""
 fi
 
-# Rollback instructions
-cat << EOF > rollback.md
-# Rollback Instructions
-If issues occur, restore from backup:
-\`\`\`bash
-rm -rf ~/.ssh
-mv ~/.ssh.backup.* ~/.ssh
-\`\`\`
-EOF
+echo "📦 Creating backup..."
+BACKUP_DIR="$HOME/.arkkeeper_backups/$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$BACKUP_DIR"
 
-echo "✨ Rotation complete! Review rollback.md for emergency procedures."
+if [[ "ssh_example" == *"ssh"* ]]; then
+    echo "🔑 Rotating SSH keys..."
+    if [ -d "$HOME/.ssh" ]; then
+        cp -r "$HOME/.ssh" "$BACKUP_DIR/"
+        echo "  ✓ Backed up ~/.ssh to $BACKUP_DIR"
+    fi
+    if [ "${DRY_RUN:-1}" = "0" ]; then
+        ssh-keygen -t ed25519 -a 256 -C "rotated_$(date +%Y%m%d)" \
+            -f "$HOME/.ssh/id_ed25519_new" -N ""
+        echo "  ✓ Generated new Ed25519 key"
+    else
+        echo "  Would generate a new Ed25519 key"
+        echo "  Would update authorized_keys on remote hosts"
+    fi
+fi
+
+echo ""
+echo "✅ Rotation simulation complete!"
+echo "📝 Rollback: cp -r $BACKUP_DIR/* $HOME/"
 ```
 
 ## 🎨 Output Formats
 
 ### HTML Report
-Interactive dashboard with risk heatmap, sortable findings, and remediation guides:
-
-```html
-<!-- report.html structure -->
-- Executive Summary (risk score, critical findings)
-- Risk Heatmap (visual representation by category)
-- Detailed Findings Table (sortable, filterable)
-- Remediation Timeline (priority-based)
-- Best Practices Checklist
-```
+Static HTML with severity badges and remediation text generated from the rule engine.
 
 ### JSON Schema
 ```json
 {
-  "scan_metadata": {
-    "timestamp": "2024-01-15T10:30:00Z",
+  "metadata": {
+    "scan_time": "2024-01-15T10:30:00",
     "version": "0.2.0",
-    "hostname": "dev-laptop",
-    "total_findings": 42,
-    "risk_score": 73
+    "total_issues": 5
   },
-  "findings": [
-    {
-      "id": "ssh_weak_key_001",
-      "category": "ssh",
-      "path": "~/.ssh/id_rsa",
-      "severity": "high",
-      "score": 85,
-      "rules_matched": ["ssh_weak_algorithm", "ssh_key_age"],
-      "metadata": {
-        "algorithm": "rsa-2048",
-        "age_days": 730,
-        "passphrase_protected": false,
-        "permissions": "0644",
-        "fingerprint": "SHA256:..."
-      },
-      "remediation": {
-        "effort": "low",
-        "impact": "medium",
-        "playbook": "playbooks/ssh_weak_key_001/"
+  "findings": {
+    "ssh": [
+      {
+        "id": "ssh_id_rsa",
+        "category": "ssh",
+        "path": "/Users/me/.ssh/id_rsa",
+        "metadata": {
+          "permissions": "644",
+          "age_days": 730,
+          "key_type": "rsa",
+          "passphrase_protected": false
+        },
+        "findings": [
+          {
+            "severity": "high",
+            "rule": "ssh_no_passphrase",
+            "message": "SSH key without passphrase protection",
+            "weight": 30,
+            "fix": "ssh-keygen -p -f /Users/me/.ssh/id_rsa"
+          }
+        ]
       }
-    }
-  ]
+    ]
+  }
 }
 ```
 
@@ -272,38 +260,12 @@ arkkeeper:
         - ~/.ssh/known_hosts
         - ~/.cache
     
-    parallel_workers: 4
-    timeout_seconds: 300
-  
-  rules:
-    sources:
-      - rules/default.yml
-      - rules/custom.yml
-    
-    severity_weights:
-      critical: 100
-      high: 75
-      medium: 50
-      low: 25
-  
   rotation:
     dry_run_default: true
     backup_before_rotate: true
-    calendar_reminders:
-      ssh: 365  # days
-      aws: 90
-      tokens: 180
-  
-  privacy:
-    redact_patterns:
-      - 'AKIA[0-9A-Z]{16}'  # AWS keys
-      - 'ghp_[a-zA-Z0-9]{36}'  # GitHub PATs
-    never_log_paths:
-      - ~/.gnupg
-      - ~/.password-store
-  
+
   output:
-    formats: [json, html, csv]
+    formats: [json, html, markdown]
     directory: ./arkkeeper_outputs
     compress_old_reports: true
 ```
@@ -311,58 +273,19 @@ arkkeeper:
 ## 🧪 Testing
 
 ```bash
-# Run full test suite
-pytest tests/ -v --cov=ark --cov-report=html
-
-# Test with fixtures (no real secrets)
-pytest tests/test_ssh.py::test_weak_key_detection
-
-# Integration test with mock home directory
-pytest tests/integration/test_full_scan.py --fixtures=tests/fixtures/fake_home
-
-# Security regression tests
-pytest tests/security/test_no_secret_leakage.py
+# Run the available unit tests
+pytest tests/test_ssh.py -v
 ```
-
-### Test Coverage Areas
-
-- **Enumerators**: File discovery, permission checks, metadata extraction
-- **Parsers**: Config file formats, credential patterns, history analysis
-- **Rules Engine**: Condition evaluation, scoring logic, weight calculations
-- **Rotation**: Script generation, dry-run mode, rollback procedures
-- **Privacy**: Secret redaction, no-leak guarantees, memory cleanup
 
 ## 📚 CLI Reference
 
 ```bash
-# Core Commands
-ark init [--config PATH]           # Initialize configuration
-ark scan [--out DIR] [--category]  # Run security scan
-ark report [--format] [--open]     # Generate/view reports
-ark rotate --id FINDING [--dry]    # Generate rotation scripts
-ark remind [--calendar]            # Export calendar reminders
-
-# Analysis Commands
-ark rules --list [--verbose]       # Show all rules and weights
-ark explain --finding ID           # Detailed finding explanation
-ark compare --baseline PATH        # Compare against previous scan
-
-# Advanced Options
-ark scan --online aws,github       # Enable cloud API checks
-ark scan --no-history              # Skip shell history
-ark scan --quick                   # Fast scan, fewer checks
-ark rotate --all --severity high   # Bulk rotation scripts
-ark export --format sarif          # SARIF for CI/CD integration
-
-# Configuration
-ark config get [KEY]               # View configuration
-ark config set KEY VALUE           # Update configuration
-ark config validate                # Verify configuration
-
-# Privacy & Safety
-ark clean                          # Remove all outputs/caches
-ark audit --last 30d               # View audit log
-ark test --fixtures                # Test with mock data
+python -m ark.cli init                          # Initialize configuration directory
+python -m ark.cli scan [--out DIR] [--category] # Run credential scan
+python -m ark.cli report [--format] [--open]    # Generate or view reports
+python -m ark.cli rotate --id FINDING [--dry-run/--execute] # Create rotation script
+python -m ark.cli remind [--calendar] [--days]  # Export rotation reminders
+python -m ark.cli selftest                      # Verify installation dependencies
 ```
 
 ## 🔧 Development
@@ -377,50 +300,41 @@ arkkeeper/
 ├── SECURITY.md                    # Security model and threat analysis
 ├── CONTRIBUTING.md                # Contribution guidelines
 ├── LICENSE                        # MIT License
-├── .github/
-│   ├── workflows/
-│   │   ├── ci.yml                # Tests + linting
-│   │   ├── security.yml          # Security scanning
-│   │   └── release.yml           # PyPI publishing
-│   └── ISSUE_TEMPLATE/
+├── pyproject.toml                 # Build configuration stub
+├── requirements.txt               # Dependencies
+├── playbooks/                     # Rotation scripts generated by the CLI
+├── scripts/
+│   └── run_arkkeeper_demo.sh     # End-to-end demo helper
 ├── src/ark/
 │   ├── __init__.py
-│   ├── cli.py                    # Click-based CLI
-│   ├── config.py                 # Configuration management
+│   ├── cli.py                    # Click-based CLI entry point
 │   ├── enumerate/
-│   │   ├── base.py               # Abstract enumerator
-│   │   ├── ssh.py                # SSH key/config scanner
+│   │   ├── __init__.py
+│   │   ├── base.py               # Enumeration scaffolding
 │   │   ├── aws.py                # AWS credential scanner
-│   │   ├── azure.py              # Azure credential scanner
+│   │   ├── azure.py              # Azure token scanner
+│   │   ├── docker.py             # Docker auth scanner
 │   │   ├── gcp.py                # GCP credential scanner
 │   │   ├── git.py                # Git config scanner
+│   │   ├── github.py             # GitHub CLI scanner
 │   │   ├── npm.py                # npm token scanner
-│   │   ├── docker.py             # Docker auth scanner
-│   │   └── shell.py              # Shell history scanner
-│   ├── rules/
-│   │   ├── engine.py             # Rule evaluation engine
-│   │   ├── parser.py             # YAML rule parser
-│   │   └── scoring.py            # Risk scoring logic
-│   ├── rotate/
-│   │   ├── base.py               # Rotation interface
-│   │   ├── playbook.py           # Script generation
-│   │   └── providers/            # Per-service rotation
+│   │   ├── pypi.py               # PyPI token scanner
+│   │   ├── shell.py              # Shell history scanner
+│   │   └── ssh.py                # SSH key/config scanner
 │   ├── report/
-│   │   ├── html.py               # HTML report generator
-│   │   ├── json.py               # JSON output
-│   │   └── calendar.py           # ICS generation
-│   └── utils/
-│       ├── crypto.py             # Hashing, fingerprints
-│       ├── redact.py             # Secret redaction
-│       └── backup.py             # Backup utilities
+│   │   └── __init__.py           # Placeholder for report helpers
+│   ├── rotate/
+│   │   └── __init__.py           # Placeholder for rotation helpers
+│   └── rules/
+│       ├── __init__.py
+│       ├── engine.py             # Rule evaluation engine
+│       └── parser.py             # YAML rule parser
 ├── tests/
-│   ├── fixtures/                  # Test data
-│   ├── unit/                     # Unit tests
-│   ├── integration/              # Integration tests
-│   └── security/                 # Security tests
+│   ├── conftest.py               # Ensure src/ is importable
+│   └── test_ssh.py               # SSH enumerator unit tests
 ├── rules/
 │   └── default.yml               # Default rule set
-└── requirements.txt              # Dependencies
+└── setup.py                      # Legacy setuptools helper
 ```
 
 ### Contributing
@@ -436,29 +350,19 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. Key points:
 ## 🚦 Roadmap
 
 ### v0.1 (MVP) ✅
-- [x] Core enumerators (SSH, AWS, Git, npm, Docker)
-- [x] Basic rule engine with scoring
-- [x] JSON/CSV output
-- [x] HTML report generation
+- [x] SSH credential enumeration
+- [x] CLI scaffolding and local reports
 
 ### v0.2 (Current)
-- [ ] Rotation script generation
-- [ ] Calendar reminder export (.ics)
-- [ ] Extended cloud provider support
-- [ ] Shell history pattern detection
+- [x] Rule-driven severity engine
+- [x] Multi-service enumerators (AWS, Git, GitHub, npm, Docker, Azure, GCP, PyPI, shell)
+- [x] Rotation playbook generation
+- [x] Calendar reminder export (.ics)
 
 ### v0.3
-- [ ] Rich TUI with Textual
-- [ ] Local web UI (`ark serve`)
-- [ ] Pluggable rule system
-- [ ] GitHub Actions integration
-
-### v1.0
-- [ ] PyPI package with `pipx` support
-- [ ] Signed binaries for macOS/Linux
-- [ ] 95% test coverage
-- [ ] Performance optimizations (<30s for typical scan)
-- [ ] Enterprise features (SAML, audit compliance)
+- [ ] Additional rule packs and customization helpers
+- [ ] Extended reporting (aggregated summaries, markdown tuning)
+- [ ] CLI quality-of-life improvements
 
 ## ⚠️ Warnings & Disclaimers
 
@@ -467,8 +371,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. Key points:
 1. **Always backup** before rotation operations
 2. **Never run** rotation scripts without reviewing them first
 3. **Test in dev** before applying to production credentials
-4. **Keep audit logs** for compliance and debugging
-5. **Verify rollback** procedures before executing rotations
+4. **Verify rollback** procedures before executing rotations
 
 ### Legal
 
