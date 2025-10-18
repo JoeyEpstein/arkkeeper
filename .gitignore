@@ -6,6 +6,7 @@ dist/
 *.egg-info/
 arkkeeper_outputs/
 *.backup.*
+.venv/
 venv/
 .DS_Store
 *.pem

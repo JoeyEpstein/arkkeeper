@@ -17,7 +17,7 @@ rules:
     severity: high
     weight: 25
     description: "Weak SSH key algorithm"
-    condition: "algorithm == 'rsa' and key_size < 3072"
+    condition: "algorithm == 'dsa'"
     remediation: "Generate Ed25519 or RSA-4096 key"
 
   ssh_excessive_permissions:
@@ -41,13 +41,101 @@ rules:
     severity: critical
     weight: 50
     description: "AWS root account credentials detected"
-    condition: "profile == 'root' or user_id == 'root'"
+    condition: "is_root"
     remediation: "Never use root credentials; create IAM users"
+
+  aws_missing_mfa:
+    category: aws
+    severity: high
+    weight: 20
+    description: "AWS profile missing MFA configuration"
+    condition: "not has_mfa"
+    remediation: "Enable MFA for the IAM user and reference mfa_serial in ~/.aws/config"
 
   git_credential_in_url:
     category: git
     severity: critical
     weight: 45
     description: "Credentials embedded in Git remote URL"
-    condition: "remote_url contains '@' and 'https://'"
+    condition: "any('@' in url and '://' in url for url in remote_urls)"
     remediation: "Use SSH URLs or credential helpers"
+
+  git_plaintext_store:
+    category: git
+    severity: high
+    weight: 35
+    description: "Git credentials stored in plaintext"
+    condition: "contains_password"
+    remediation: "Use credential helpers or erase stored passwords"
+
+  github_pat_present:
+    category: github
+    severity: medium
+    weight: 25
+    description: "GitHub CLI hosts.yml contains stored tokens"
+    condition: "token_count > 0"
+    remediation: "Review gh auth status and remove unused tokens"
+
+  npm_plaintext_auth:
+    category: npm
+    severity: high
+    weight: 30
+    description: "npmrc contains plaintext auth tokens"
+    condition: "has_auth_token or has_legacy_auth"
+    remediation: "Move tokens to environment variables or dedicated auth helpers"
+
+  npm_registry_token_listing:
+    category: npm
+    severity: medium
+    weight: 15
+    description: "npmrc lists registry tokens inline"
+    condition: "len(registry_tokens) > 0"
+    remediation: "Use npm login with credential store instead of inline tokens"
+
+  pypi_password_detected:
+    category: pypi
+    severity: high
+    weight: 30
+    description: "PyPI config stores password in plaintext"
+    condition: "has_password"
+    remediation: "Use API tokens stored via keyring instead of plaintext passwords"
+
+  docker_inline_credentials:
+    category: docker
+    severity: high
+    weight: 35
+    description: "Docker config.json stores inline credentials"
+    condition: "has_inline_auth"
+    remediation: "Configure credsStore or credHelpers for Docker authentication"
+
+  docker_missing_credential_store:
+    category: docker
+    severity: medium
+    weight: 20
+    description: "Docker config lacks credential store integration"
+    condition: "not credential_stores"
+    remediation: "Set credsStore or credHelpers to avoid inline credentials"
+
+  shell_secret_pattern:
+    category: shell
+    severity: medium
+    weight: 25
+    description: "Shell history contains potential secrets"
+    condition: "any(patterns.values())"
+    remediation: "Scrub shell history and rotate exposed credentials"
+
+  azure_cached_tokens:
+    category: azure
+    severity: medium
+    weight: 20
+    description: "Azure CLI token cache contains refresh tokens"
+    condition: "has_refresh_tokens"
+    remediation: "Run 'az account clear' to remove cached tokens when not needed"
+
+  gcp_private_key_file:
+    category: gcp
+    severity: high
+    weight: 35
+    description: "GCP application default credentials include private key"
+    condition: "has_private_key"
+    remediation: "Rotate the service account key and prefer workload identity federation"

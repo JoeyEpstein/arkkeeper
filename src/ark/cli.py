@@ -6,13 +6,26 @@ Save this as src/ark/cli.py
 import click
 import json
 import time
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
+import yaml
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
 from rich.syntax import Syntax
-import yaml
+from rich.table import Table
+
+from ark.enumerate.aws import scan_aws
+from ark.enumerate.azure import scan_azure
+from ark.enumerate.docker import scan_docker
+from ark.enumerate.gcp import scan_gcp
+from ark.enumerate.git import scan_git
+from ark.enumerate.github import scan_github
+from ark.enumerate.npm import scan_npm
+from ark.enumerate.pypi import scan_pypi
+from ark.enumerate.shell import scan_shell
+from ark.enumerate.ssh import scan_ssh
+from ark.rules.engine import RuleEngine
 
 console = Console()
 
@@ -65,28 +78,55 @@ def init():
 def scan(out, category):
     """Scan for credentials and security issues."""
     console.print("[yellow]🔍 Scanning for credentials...[/yellow]")
-    
-    from ark.enumerate.ssh import scan_ssh
-    
+
+    scanners = {
+        'ssh': ("SSH keys", scan_ssh),
+        'aws': ("AWS credentials", scan_aws),
+        'git': ("Git configuration", scan_git),
+        'github': ("GitHub CLI tokens", scan_github),
+        'npm': ("npm tokens", scan_npm),
+        'pypi': ("PyPI tokens", scan_pypi),
+        'docker': ("Docker config", scan_docker),
+        'shell': ("Shell history", scan_shell),
+        'azure': ("Azure tokens", scan_azure),
+        'gcp': ("GCP credentials", scan_gcp),
+    }
+
+    if category and category not in scanners:
+        console.print(f"[red]❌ Unknown category: {category}[/red]")
+        raise click.Exit(1)
+
     # Create output directory
     output_dir = Path(out)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    all_findings = {}
-    total_issues = 0
-    
-    # Run SSH scanner
-    if not category or category == 'ssh':
-        console.print("  Scanning SSH keys...")
-        ssh_findings = scan_ssh()
-        if ssh_findings:
-            all_findings['ssh'] = ssh_findings
-            for finding in ssh_findings:
-                total_issues += len(finding.get('findings', []))
-    
-    # TODO: Add more scanners (AWS, Git, npm, etc.)
-    
-    # Save findings
+
+    all_findings: dict[str, list[dict]] = {}
+
+    for key, (label, scanner) in scanners.items():
+        if category and category != key:
+            continue
+        console.print(f"  Scanning {label}...")
+        try:
+            results = scanner()
+        except Exception as exc:  # pragma: no cover - defensive
+            console.print(f"    [red]Failed to scan {label}: {exc}[/red]")
+            continue
+        if results:
+            all_findings[key] = results
+
+    rule_paths = [Path("rules/default.yml")]
+    config_rules = Path.home() / ".config" / "arkkeeper" / "rules.yml"
+    if config_rules.exists():
+        rule_paths.append(config_rules)
+    engine = RuleEngine.from_files(rule_paths)
+    all_findings = engine.apply(all_findings)
+
+    total_issues = sum(
+        len(finding.get('findings', []))
+        for findings in all_findings.values()
+        for finding in findings
+    )
+
     findings_file = output_dir / "findings.json"
     with open(findings_file, 'w') as f:
         json.dump({
@@ -97,28 +137,27 @@ def scan(out, category):
             },
             "findings": all_findings
         }, f, indent=2, default=str)
-    
-    # Display summary
+
     if all_findings:
-        for category, findings in all_findings.items():
-            if findings:
-                table = Table(title=f"{category.upper()} Security Findings")
-                table.add_column("Path", style="cyan")
-                table.add_column("Issues", style="red")
-                table.add_column("Severity", style="yellow")
-                
-                for finding in findings:
-                    path = finding['path'].replace(str(Path.home()), "~")
-                    issues = finding.get('findings', [])
-                    issue_count = len(issues)
-                    if issues:
-                        max_severity = max(issues, key=lambda x: _severity_weight(x['severity']))['severity']
-                        table.add_row(path, str(issue_count), max_severity.upper())
-                
-                console.print(table)
+        for cat_key, findings in all_findings.items():
+            if not findings:
+                continue
+            table = Table(title=f"{cat_key.upper()} Security Findings")
+            table.add_column("Path", style="cyan")
+            table.add_column("Issues", style="red")
+            table.add_column("Severity", style="yellow")
+
+            for finding in findings:
+                path = finding['path'].replace(str(Path.home()), "~")
+                issues = finding.get('findings', [])
+                issue_count = len(issues)
+                if issues:
+                    max_severity = max(issues, key=lambda x: _severity_weight(x['severity']))['severity']
+                    table.add_row(path, str(issue_count), max_severity.upper())
+            console.print(table)
     else:
         console.print("[green]  ✓ No security issues found[/green]")
-    
+
     console.print(f"\n[green]✅ Scan complete! Results saved to {findings_file}[/green]")
     console.print(f"[blue]📊 Total issues found: {total_issues}[/blue]")
 
