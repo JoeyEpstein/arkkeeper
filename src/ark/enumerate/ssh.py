@@ -1,7 +1,4 @@
-"""
-SSH credential enumerator - fixed version with proper type hints.
-Save this as src/ark/enumerate/ssh.py
-"""
+"""SSH credential enumerator."""
 
 from pathlib import Path
 from datetime import datetime
@@ -89,6 +86,7 @@ class SSHEnumerator:
         
         # Get key type
         key_type = self._get_key_type(key_path)
+        has_passphrase = False
         
         # Check permissions
         try:
@@ -142,7 +140,7 @@ class SSHEnumerator:
                         has_passphrase = "bcrypt" in content or "aes" in content
                     else:
                         has_passphrase = False
-                    
+
                     if not has_passphrase and key_type != "unknown":
                         finding["findings"].append({
                             "severity": "high",
@@ -151,7 +149,7 @@ class SSHEnumerator:
                             "fix": f"ssh-keygen -p -f {key_path} (add passphrase to existing key)"
                         })
             except (OSError, IOError):
-                pass
+                has_passphrase = False
             
             # Add metadata
             finding["metadata"] = {
@@ -160,7 +158,8 @@ class SSHEnumerator:
                 "key_type": key_type or "unknown",
                 "size_bytes": file_stat.st_size,
                 "fingerprint": self._get_key_fingerprint(key_path),
-                "last_modified": datetime.fromtimestamp(file_stat.st_mtime).isoformat()
+                "last_modified": datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
+                "passphrase_protected": has_passphrase,
             }
             
         except (OSError, IOError) as e:
