@@ -321,15 +321,14 @@ arkkeeper/
 │   │   ├── shell.py              # Shell history scanner
 │   │   └── ssh.py                # SSH key/config scanner
 │   ├── report/
-│   │   └── __init__.py           # Placeholder for report helpers
+│   │   └── __init__.py
 │   ├── rotate/
-│   │   └── __init__.py           # Placeholder for rotation helpers
+│   │   └── __init__.py
 │   └── rules/
 │       ├── __init__.py
 │       ├── engine.py             # Rule evaluation engine
 │       └── parser.py             # YAML rule parser
 ├── tests/
-│   ├── conftest.py               # Ensure src/ is importable
 │   └── test_ssh.py               # SSH enumerator unit tests
 ├── rules/
 │   └── default.yml               # Default rule set
