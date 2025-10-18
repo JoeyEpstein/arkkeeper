@@ -43,7 +43,7 @@ ark init
 ark scan
 
 # View the HTML report
-ark report --open
+ark report --format html --open
 
 # Generate a rotation script for a finding
 ark rotate --id ssh_key_example --dry-run
@@ -51,6 +51,8 @@ ark rotate --id ssh_key_example --dry-run
 # Export calendar reminders
 ark remind --calendar ics --days 90
 ```
+
+> **Tip:** From a cloned repository checkout you can run the full workflow end-to-end with `bash scripts/run_arkkeeper_demo.sh`.
 
 ## 📊 What Gets Scanned
 
@@ -298,11 +300,10 @@ arkkeeper/
 ├── CONTRIBUTING.md                # Contribution guidelines
 ├── LICENSE                        # MIT License
 ├── .github/
-│   ├── workflows/
-│   │   ├── ci.yml                # Tests + linting
-│   │   ├── security.yml          # Security scanning
-│   │   └── release.yml           # PyPI publishing
-│   └── ISSUE_TEMPLATE/
+│   └── workflows/
+│       └── ci.yml                # Pytest smoke in CI
+├── scripts/
+│   └── run_arkkeeper_demo.sh     # End-to-end demo helper
 ├── src/ark/
 │   ├── __init__.py
 │   ├── cli.py                    # Click-based CLI entry point
