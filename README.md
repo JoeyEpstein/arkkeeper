@@ -332,7 +332,7 @@ arkkeeper/
 │   └── test_ssh.py               # SSH enumerator unit tests
 ├── rules/
 │   └── default.yml               # Default rule set
-└── requirements.txt              # Dependencies
+└── setup.py                      # Legacy setuptools helper
 ```
 
 ### Contributing

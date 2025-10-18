@@ -1,7 +1,4 @@
-"""
-Enhanced Arkkeeper CLI with all core commands.
-Save this as src/ark/cli.py
-"""
+"""Arkkeeper command-line interface."""
 
 import click
 import json

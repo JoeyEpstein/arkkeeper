@@ -1,7 +1,4 @@
-"""
-SSH credential enumerator - fixed version with proper type hints.
-Save this as src/ark/enumerate/ssh.py
-"""
+"""SSH credential enumerator."""
 
 from pathlib import Path
 from datetime import datetime
