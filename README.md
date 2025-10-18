@@ -43,17 +43,16 @@ ark init
 ark scan
 
 # View the HTML report
-ark report --open
+ark report --format html --open
 
 # Generate a rotation script for a finding
 ark rotate --id ssh_key_example --dry-run
 
 # Export calendar reminders
 ark remind --calendar ics --days 90
-
-# Run the end-to-end demo from a cloned repo
-bash scripts/run_arkkeeper_demo.sh
 ```
+
+> **Tip:** From a cloned repository checkout you can run the full workflow end-to-end with `bash scripts/run_arkkeeper_demo.sh`.
 
 ## 📊 What Gets Scanned
 
@@ -301,11 +300,10 @@ arkkeeper/
 ├── CONTRIBUTING.md                # Contribution guidelines
 ├── LICENSE                        # MIT License
 ├── .github/
-│   ├── workflows/
-│   │   ├── ci.yml                # Tests + linting
-│   │   ├── security.yml          # Security scanning
-│   │   └── release.yml           # PyPI publishing
-│   └── ISSUE_TEMPLATE/
+│   └── workflows/
+│       └── ci.yml                # Pytest smoke in CI
+├── scripts/
+│   └── run_arkkeeper_demo.sh     # End-to-end demo helper
 ├── src/ark/
 │   ├── __init__.py
 │   ├── cli.py                    # Click-based CLI entry point
@@ -323,14 +321,15 @@ arkkeeper/
 │   │   ├── shell.py              # Shell history scanner
 │   │   └── ssh.py                # SSH key/config scanner
 │   ├── report/
-│   │   └── __init__.py
+│   │   └── __init__.py           # Placeholder for report helpers
 │   ├── rotate/
-│   │   └── __init__.py
+│   │   └── __init__.py           # Placeholder for rotation helpers
 │   └── rules/
 │       ├── __init__.py
 │       ├── engine.py             # Rule evaluation engine
 │       └── parser.py             # YAML rule parser
 ├── tests/
+│   ├── conftest.py               # Ensure src/ is importable
 │   └── test_ssh.py               # SSH enumerator unit tests
 ├── rules/
 │   └── default.yml               # Default rule set
